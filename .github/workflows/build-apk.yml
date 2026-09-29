@@ -32,12 +32,9 @@ jobs:
         shell: bash
         run: |
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-
           if [ ! -x "$SDKMANAGER" ]; then
             SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)
           fi
-
-          echo "Using sdkmanager: $SDKMANAGER"
 
           yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
 
@@ -45,12 +42,43 @@ jobs:
             "platforms;android-35" \
             "build-tools;35.0.0"
 
+      - name: Find Android project
+        shell: bash
+        run: |
+          SETTINGS_FILE=$(find . -maxdepth 4 -name settings.gradle.kts -print -quit)
+
+          if [ -z "$SETTINGS_FILE" ]; then
+            echo "ERROR: settings.gradle.kts not found"
+            find . -maxdepth 3 -type f | sort
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$SETTINGS_FILE")
+
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Android project found at: $PROJECT_DIR"
+
       - name: Build Money Graph APK
-        run: gradle :app:assembleDebug --stacktrace
+        shell: bash
+        run: |
+          gradle -p "$PROJECT_DIR" :app:assembleDebug --stacktrace
+
+      - name: Prepare APK
+        shell: bash
+        run: |
+          APK=$(find "$PROJECT_DIR/app/build/outputs/apk/debug" -name "*.apk" -print -quit)
+
+          if [ -z "$APK" ]; then
+            echo "ERROR: APK not found"
+            exit 1
+          fi
+
+          cp "$APK" Money-Graph.apk
+          ls -lh Money-Graph.apk
 
       - name: Upload Money Graph APK
         uses: actions/upload-artifact@v4
         with:
           name: Money-Graph-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: Money-Graph.apk
           if-no-files-found: error
